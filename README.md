@@ -1,3 +1,3 @@
 # Get it going!
 
-User friendly bootstrapping of command line tools that require per-project installs
+User friendly bootstrapping of tools that require per-project installs

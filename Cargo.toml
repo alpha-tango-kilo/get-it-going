@@ -1,6 +1,6 @@
 [package]
 name = "get-it-going"
-description = "User friendly bootstrapping of command line tools that require per-project installs"
+description = "User friendly bootstrapping of tools that require per-project installs"
 categories = ["command-line-utilities"]
 version = "0.1.0"
 edition = "2021"
