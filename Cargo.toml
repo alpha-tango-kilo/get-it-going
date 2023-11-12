@@ -11,3 +11,15 @@ license = "GPL-3.0-only"
 repository = "https://codeberg.org/alpha-tango-kilo/get-it-going"
 
 [dependencies]
+anyhow = "1.0.75"
+dirs = "5.0.1"
+env_logger = "0.10.1"
+log = "0.4.20"
+# serde = { version = "1.0.192", features = ["derive"] }
+# toml = { version = "0.8.8", default-features = false }
+
+[profile.release]
+opt-level = "s"
+lto = true
+panic = "abort"
+strip = true
