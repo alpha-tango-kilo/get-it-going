@@ -1,20 +1,31 @@
-use std::{env, io, io::Write, path::PathBuf, process::ExitCode};
+use std::{
+    env, io,
+    io::Write,
+    path::PathBuf,
+    process::{Command, ExitCode},
+};
 
-use anyhow::anyhow;
+use anyhow::{anyhow, Context};
 use env_logger::Env;
 use log::{debug, error, info, LevelFilter};
 
 fn main() -> ExitCode {
     let name = get_name();
+    let name_clone = name.clone();
     env_logger::builder()
         .filter_level(LevelFilter::Warn)
         .parse_env(Env::new().filter("GIG_LOG"))
         .format(move |buf, record| {
-            writeln!(buf, "[{name} {}]: {}", record.level(), record.args())
+            writeln!(
+                buf,
+                "[{name_clone} {}]: {}",
+                record.level(),
+                record.args()
+            )
         })
         .init();
 
-    if let Err(why) = _main(name) {
+    if let Err(why) = _main(&name) {
         error!("unable to launch {name}: {why}");
         return ExitCode::FAILURE;
     }
@@ -25,19 +36,21 @@ fn _main(name: &str) -> anyhow::Result<()> {
     let _config_file = find_config(name)?
         .ok_or_else(|| anyhow!("unable to find config file"))?;
     // TODO: load config
+    let program = "echo"; // TODO: use program from config
+    info!("spawning {program}");
+    Command::new(program)
+        .args(env::args_os().skip(1))
+        .spawn()
+        .context("failed to run")?;
     Ok(())
 }
 
-// Small memory leak to get the name as a static string so it can be used in
-// logs
-fn get_name() -> &'static str {
+fn get_name() -> Box<str> {
     match env::var("GIG_OVERRIDE") {
-        Ok(name) => Box::leak(name.into_boxed_str()),
+        Ok(name) => name.into_boxed_str(),
         Err(_) => {
             let executable = env::current_exe().unwrap();
-            let name = executable.file_stem().unwrap().to_string_lossy();
-            let name = name.into();
-            Box::leak(name)
+            executable.file_stem().unwrap().to_string_lossy().into()
         },
     }
 }
