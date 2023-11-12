@@ -1,0 +1,13 @@
+[package]
+name = "get-it-going"
+description = "User friendly bootstrapping of command line tools that require per-project installs"
+categories = ["command-line-utilities"]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.70"
+authors = ["alpha-tango-kilo <git@heyatk.com>"]
+readme = "README.md"
+license = "GPL-3.0-only"
+repository = "https://codeberg.org/alpha-tango-kilo/get-it-going"
+
+[dependencies]
