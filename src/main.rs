@@ -6,8 +6,8 @@ use std::{
 };
 
 use anyhow::{anyhow, Context};
-use env_logger::Env;
-use log::{debug, error, info, LevelFilter};
+use env_logger::{fmt::Color, Env};
+use log::{debug, error, info, Level, LevelFilter};
 use serde::{
     de::{Error, MapAccess, Visitor},
     Deserialize, Deserializer,
@@ -20,10 +20,23 @@ fn main() -> ExitCode {
         .filter_level(LevelFilter::Warn)
         .parse_env(Env::new().filter("GIG_LOG"))
         .format(move |buf, record| {
+            let mut style = buf.style();
+            match record.level() {
+                Level::Error => {
+                    style.set_color(Color::Red);
+                },
+                Level::Warn => {
+                    style.set_color(Color::Yellow);
+                },
+                Level::Info => {},
+                Level::Debug | Level::Trace => {
+                    style.set_dimmed(true);
+                },
+            }
             writeln!(
                 buf,
                 "[{name_clone} {}]: {}",
-                record.level(),
+                style.value(record.level()),
                 record.args()
             )
         })
