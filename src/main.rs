@@ -1,5 +1,5 @@
 use std::{
-    env, io,
+    env, fmt, fs, io,
     io::Write,
     path::PathBuf,
     process::{Command, ExitCode},
@@ -8,6 +8,10 @@ use std::{
 use anyhow::{anyhow, Context};
 use env_logger::Env;
 use log::{debug, error, info, LevelFilter};
+use serde::{
+    de::{Error, MapAccess, Visitor},
+    Deserialize, Deserializer,
+};
 
 fn main() -> ExitCode {
     let name = get_name();
@@ -33,8 +37,11 @@ fn main() -> ExitCode {
 }
 
 fn _main(name: &str) -> anyhow::Result<()> {
-    let _config_file = find_config(name)?
+    let config_file = find_config(name)?
         .ok_or_else(|| anyhow!("unable to find config file"))?;
+    let config = fs::read_to_string(&config_file)
+        .with_context(|| format!("couldn't read {}", config_file.display()))?;
+    let _config = toml::from_str::<AppConfig>(&config)?;
     // TODO: load config
     let program = "echo"; // TODO: use program from config
     info!("spawning {program}");
@@ -67,4 +74,117 @@ fn find_config(name: &str) -> Result<Option<PathBuf>, io::Error> {
         }
     }
     Ok(None)
+}
+
+#[derive(Debug, Deserialize)]
+struct AppConfig {
+    required_files: Vec<PathBuf>,
+    #[serde(default)]
+    search_parents: bool,
+    before_run: BeforeRun,
+    run: Run,
+}
+
+#[derive(Debug)]
+enum BeforeRun {
+    Command(String),
+    ScriptPath(PathBuf),
+}
+
+impl<'de> Deserialize<'de> for BeforeRun {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct BeforeRunVisitor;
+
+        impl<'de> Visitor<'de> for BeforeRunVisitor {
+            type Value = BeforeRun;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("before_run table")
+            }
+
+            fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
+            where
+                A: MapAccess<'de>,
+            {
+                let (key, value) =
+                    map.next_entry::<&'de str, String>()?.ok_or_else(|| {
+                        A::Error::custom("empty before_run table")
+                    })?;
+                match key {
+                    "command" => Ok(BeforeRun::Command(value)),
+                    "script_path" => {
+                        let path = PathBuf::from(value);
+                        if path.is_file() {
+                            Ok(BeforeRun::ScriptPath(path))
+                        } else {
+                            Err(A::Error::custom("invalid path (not a file)"))
+                        }
+                    },
+                    unknown => Err(A::Error::custom(format_args!(
+                        "unrecognised key \"{unknown}\", expected \"command\" \
+                         or \"script_path\""
+                    ))),
+                }
+            }
+        }
+
+        deserializer.deserialize_map(BeforeRunVisitor)
+    }
+}
+
+#[derive(Debug)]
+enum Run {
+    SubcommandOf(String),
+    PrependFolder(PathBuf),
+    Executable(PathBuf),
+}
+
+impl<'de> Deserialize<'de> for Run {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct RunVisitor;
+
+        impl<'de> Visitor<'de> for RunVisitor {
+            type Value = Run;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("run table")
+            }
+
+            fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
+            where
+                A: MapAccess<'de>,
+            {
+                let (key, value) = map
+                    .next_entry::<&'de str, String>()?
+                    .ok_or_else(|| A::Error::custom("empty run table"))?;
+                match key {
+                    "subcommand_of" => Ok(Run::SubcommandOf(value)),
+                    "path" => {
+                        let path = PathBuf::from(value);
+                        if path.is_dir() {
+                            Ok(Run::PrependFolder(path))
+                        } else if path.is_file() {
+                            Ok(Run::Executable(path))
+                        } else {
+                            Err(A::Error::custom(
+                                "invalid path (not folder or file)",
+                            ))
+                        }
+                    },
+                    unknown => Err(A::Error::custom(format_args!(
+                        "unrecognised key \"{unknown}\", expected \
+                         \"subcommand_of\" or \"path\""
+                    ))),
+                }
+            }
+        }
+
+        deserializer.deserialize_map(RunVisitor)
+    }
 }
