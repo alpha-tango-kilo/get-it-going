@@ -15,6 +15,7 @@ anyhow = "1.0.75"
 dirs = "5.0.1"
 log = "0.4.20"
 serde = { version = "1.0.192", features = ["derive"] }
+shlex = "1.2.0"
 
 [dependencies.env_logger]
 version = "0.10.1"

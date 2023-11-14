@@ -6,13 +6,14 @@ use std::{
     process::{Command, ExitCode},
 };
 
-use anyhow::{anyhow, Context};
+use anyhow::{anyhow, bail, Context};
 use env_logger::{fmt::Color, Env};
 use log::{debug, error, info, Level, LevelFilter};
 use serde::{
     de::{Error, MapAccess, Visitor},
     Deserialize, Deserializer,
 };
+use shlex::Shlex;
 
 fn main() -> ExitCode {
     let name = get_name();
@@ -80,7 +81,23 @@ fn _main(name: &str) -> anyhow::Result<()> {
         env::current_dir()?
     };
 
-    // Step 3: build and spawn process
+    // Step 3: run before_run task/script
+    let mut command = match &config.before_run {
+        BeforeRun::Command(cmd_str) => {
+            let mut iter = Shlex::new(cmd_str);
+            let mut command = Command::new(iter.next().unwrap());
+            command.args(iter);
+            command
+        },
+        BeforeRun::ScriptPath(path) => Command::new(path),
+    };
+    let status = command.status().context("failed to run before_run")?;
+    if !status.success() {
+        // TODO: include exit code?
+        bail!("before_run returned a non-zero status");
+    }
+
+    // Step 4: build and spawn process
     let program: Cow<Path> = match &config.run {
         Run::SubcommandOf(this) => Path::new(this).into(),
         Run::PrependFolder(folder) => folder.join(name).into(),
@@ -154,6 +171,7 @@ struct AppConfig {
 #[derive(Debug)]
 enum BeforeRun {
     Command(String),
+    // TODO: is it even practical to support this?
     ScriptPath(PathBuf),
 }
 
@@ -180,7 +198,13 @@ impl<'de> Deserialize<'de> for BeforeRun {
                         A::Error::custom("empty before_run table")
                     })?;
                 match key {
-                    "command" => Ok(BeforeRun::Command(value)),
+                    "command" => {
+                        if !value.is_empty() {
+                            Ok(BeforeRun::Command(value))
+                        } else {
+                            Err(A::Error::custom("command can't be empty"))
+                        }
+                    },
                     "script_path" => {
                         let path = PathBuf::from(value);
                         if path.is_file() {
