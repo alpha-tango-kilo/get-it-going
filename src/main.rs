@@ -1,7 +1,7 @@
 use std::{
     env, fmt, fs, io,
     io::Write,
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::{Command, ExitCode},
 };
 
@@ -54,12 +54,32 @@ fn _main(name: &str) -> anyhow::Result<()> {
         .ok_or_else(|| anyhow!("unable to find config file"))?;
     let config = fs::read_to_string(&config_file)
         .with_context(|| format!("couldn't read {}", config_file.display()))?;
-    let _config = toml::from_str::<AppConfig>(&config)?;
-    // TODO: load config
-    let program = "echo"; // TODO: use program from config
-    info!("spawning {program}");
-    Command::new(program)
+    let config = toml::from_str::<AppConfig>(&config)?;
+    let execute_in = if !config.required_files.is_empty() {
+        if config.search_parents {
+            search_parents(env::current_dir()?, &config.required_files)
+                .ok_or_else(|| {
+                    anyhow!(
+                        "couldn't find required files in current or parent \
+                         directories"
+                    )
+                })?
+        } else {
+            let current_dir = env::current_dir()?;
+            files_exist_in(&current_dir, &config.required_files)
+                .then_some(current_dir)
+                .ok_or_else(|| {
+                    anyhow!("couldn't find required files in current directory")
+                })?
+        }
+    } else {
+        env::current_dir()?
+    };
+    info!("spawning {}", name);
+    // TODO: handle config.run
+    Command::new(name)
         .args(env::args_os().skip(1))
+        .current_dir(&execute_in)
         .spawn()
         .context("failed to run")?;
     Ok(())
@@ -87,6 +107,25 @@ fn find_config(name: &str) -> Result<Option<PathBuf>, io::Error> {
         }
     }
     Ok(None)
+}
+
+fn files_exist_in(dir: impl AsRef<Path>, files: &[PathBuf]) -> bool {
+    let dir = dir.as_ref();
+    files.iter().all(|file_name| dir.join(file_name).exists())
+}
+
+fn search_parents(dir: impl AsRef<Path>, files: &[PathBuf]) -> Option<PathBuf> {
+    let mut dir = dir.as_ref();
+    if files_exist_in(dir, files) {
+        return Some(dir.to_owned());
+    }
+    while let Some(parent) = dir.parent() {
+        dir = parent;
+        if files_exist_in(dir, files) {
+            return Some(dir.to_owned());
+        }
+    }
+    None
 }
 
 #[derive(Debug, Deserialize)]
