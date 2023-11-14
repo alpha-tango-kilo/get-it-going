@@ -4,7 +4,6 @@ description = "User friendly bootstrapping of tools that require per-project ins
 categories = ["command-line-utilities"]
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.70"
 authors = ["alpha-tango-kilo <git@heyatk.com>"]
 readme = "README.md"
 license = "GPL-3.0-only"
