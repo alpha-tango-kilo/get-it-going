@@ -1,4 +1,5 @@
 use std::{
+    borrow::Cow,
     env, fmt, fs, io,
     io::Write,
     path::{Path, PathBuf},
@@ -50,12 +51,15 @@ fn main() -> ExitCode {
 }
 
 fn _main(name: &str) -> anyhow::Result<()> {
+    // Step 1: read config
     let config_file = find_config(name)?
         .ok_or_else(|| anyhow!("unable to find config file"))?;
     let config = fs::read_to_string(&config_file)
         .with_context(|| format!("couldn't read {}", config_file.display()))?;
     let config = toml::from_str::<AppConfig>(&config)?;
-    let execute_in = if !config.required_files.is_empty() {
+
+    // Step 2: work out if we're good to go
+    let _root = if !config.required_files.is_empty() {
         if config.search_parents {
             search_parents(env::current_dir()?, &config.required_files)
                 .ok_or_else(|| {
@@ -75,11 +79,21 @@ fn _main(name: &str) -> anyhow::Result<()> {
     } else {
         env::current_dir()?
     };
-    info!("spawning {}", name);
+
+    // Step 3: build and spawn process
+    let program: Cow<Path> = match &config.run {
+        Run::SubcommandOf(this) => Path::new(this).into(),
+        Run::PrependFolder(folder) => folder.join(name).into(),
+        Run::Executable(this) => Path::new(this).into(),
+    };
+    info!("spawning {name}");
     // TODO: handle config.run
-    Command::new(name)
+    let mut command = Command::new(program.as_os_str());
+    if matches!(&config.run, Run::SubcommandOf(_)) {
+        command.arg(name);
+    }
+    command
         .args(env::args_os().skip(1))
-        .current_dir(&execute_in)
         .spawn()
         .context("failed to run")?;
     Ok(())
