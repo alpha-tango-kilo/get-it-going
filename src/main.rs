@@ -101,10 +101,9 @@ fn _main(name: &str) -> anyhow::Result<()> {
     let program: Cow<Path> = match &config.run {
         Run::SubcommandOf(this) => Path::new(this).into(),
         Run::PrependFolder(folder) => folder.join(name).into(),
-        Run::Executable(this) => Path::new(this).into(),
+        Run::Executable(this) => this.into(),
     };
     info!("spawning {name}");
-    // TODO: handle config.run
     let mut command = Command::new(program.as_os_str());
     if matches!(&config.run, Run::SubcommandOf(_)) {
         command.arg(name);
@@ -194,10 +193,10 @@ impl<'de> Deserialize<'de> for BeforeRun {
                 A: MapAccess<'de>,
             {
                 let (key, value) =
-                    map.next_entry::<&'de str, String>()?.ok_or_else(|| {
+                    map.next_entry::<String, String>()?.ok_or_else(|| {
                         A::Error::custom("empty before_run table")
                     })?;
-                match key {
+                match key.as_str() {
                     "command" => {
                         if !value.is_empty() {
                             Ok(BeforeRun::Command(value))
@@ -251,12 +250,14 @@ impl<'de> Deserialize<'de> for Run {
                 A: MapAccess<'de>,
             {
                 let (key, value) = map
-                    .next_entry::<&'de str, String>()?
+                    .next_entry::<String, String>()?
                     .ok_or_else(|| A::Error::custom("empty run table"))?;
-                match key {
+                match key.as_str() {
                     "subcommand_of" => Ok(Run::SubcommandOf(value)),
                     "path" => {
                         let path = PathBuf::from(value);
+                        // FIXME: can't necessarily do this now if there's
+                        //        pre-run stuff this depends on
                         if path.is_dir() {
                             Ok(Run::PrependFolder(path))
                         } else if path.is_file() {
