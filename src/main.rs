@@ -1,6 +1,8 @@
 use std::{
     borrow::Cow,
-    env, fmt, fs, io,
+    env,
+    ffi::OsStr,
+    fmt, fs, io,
     io::Write,
     path::{Path, PathBuf},
     process::{Command, ExitCode},
@@ -103,15 +105,13 @@ fn _main(name: &str) -> anyhow::Result<()> {
         Run::PrependFolder(folder) => folder.join(name).into(),
         Run::Executable(this) => this.into(),
     };
-    info!("spawning {name}");
     let mut command = Command::new(program.as_os_str());
     if matches!(&config.run, Run::SubcommandOf(_)) {
         command.arg(name);
     }
-    command
-        .args(env::args_os().skip(1))
-        .spawn()
-        .context("failed to run")?;
+    command.args(env::args_os().skip(1));
+    log_command(name, &command);
+    command.spawn().context("failed to run")?;
     Ok(())
 }
 
@@ -156,6 +156,18 @@ fn search_parents(dir: impl AsRef<Path>, files: &[PathBuf]) -> Option<PathBuf> {
         }
     }
     None
+}
+
+fn log_command(name: &str, command: &Command) {
+    let program = command.get_program().to_str().expect(
+        "program should be UTF-8 when it was made from UTF-8 originally",
+    );
+    let args = command
+        .get_args()
+        .map(OsStr::to_string_lossy)
+        .collect::<Vec<_>>();
+    let args = args.join(" ");
+    info!("spawning {name} by running: {program} {args}");
 }
 
 #[derive(Debug, Deserialize)]
