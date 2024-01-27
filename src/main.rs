@@ -18,14 +18,20 @@ use serde::{
 };
 use shlex::Shlex;
 
+static NAME: Lazy<Box<str>> = Lazy::new(|| match env::var("GIG_OVERRIDE") {
+    Ok(name) => name.into_boxed_str(),
+    Err(_) => {
+        let executable = env::current_exe().unwrap();
+        executable.file_stem().unwrap().to_string_lossy().into()
+    },
+});
+
 static CWD: Lazy<PathBuf> = Lazy::new(|| {
     env::current_dir()
         .expect("get-it-going must have access to current working directory")
 });
 
 fn main() -> ExitCode {
-    let name = get_name();
-    let name_clone = name.clone();
     env_logger::builder()
         .filter_level(LevelFilter::Warn)
         .parse_env(Env::new().filter("GIG_LOG"))
@@ -45,23 +51,24 @@ fn main() -> ExitCode {
             }
             writeln!(
                 buf,
-                "[{name_clone} {}]: {}",
+                "[{} {}]: {}",
+                NAME.as_ref(),
                 style.value(record.level()),
                 record.args()
             )
         })
         .init();
 
-    if let Err(why) = _main(&name) {
-        error!("unable to launch {name}: {why}");
+    if let Err(why) = _main() {
+        error!("unable to launch {}: {why}", NAME.as_ref());
         return ExitCode::FAILURE;
     }
     ExitCode::SUCCESS
 }
 
-fn _main(name: &str) -> anyhow::Result<()> {
+fn _main() -> anyhow::Result<()> {
     // Step 1: read config
-    let config_file = find_config(name)?
+    let config_file = find_config(&NAME)?
         .ok_or_else(|| anyhow!("unable to find config file"))?;
     let config = fs::read_to_string(&config_file)
         .with_context(|| format!("couldn't read {}", config_file.display()))?;
@@ -102,35 +109,25 @@ fn _main(name: &str) -> anyhow::Result<()> {
         .status()
         .context("failed to run before_run")?;
     if !status.success() {
-        // TODO: include exit code?
         bail!("before_run returned a non-zero status");
     }
 
     // Step 4: build and spawn process
     let program: Cow<Path> = match &config.run {
         Run::SubcommandOf(this) => Path::new(this).into(),
-        Run::PrependFolder(folder) => folder.join(name).into(),
+        // TODO: need to add .exe for Windows
+        Run::PrependFolder(folder) => folder.join(NAME.as_ref()).into(),
         Run::Executable(this) => this.into(),
     };
     let mut command = Command::new(program.as_os_str());
     if matches!(&config.run, Run::SubcommandOf(_)) {
-        command.arg(name);
+        command.arg(NAME.as_ref());
     }
     command.args(env::args_os().skip(1));
     command.current_dir(root);
-    log_command(name, &command);
+    log_command(&command);
     command.spawn().context("failed to run")?;
     Ok(())
-}
-
-fn get_name() -> Box<str> {
-    match env::var("GIG_OVERRIDE") {
-        Ok(name) => name.into_boxed_str(),
-        Err(_) => {
-            let executable = env::current_exe().unwrap();
-            executable.file_stem().unwrap().to_string_lossy().into()
-        },
-    }
 }
 
 fn find_config(name: &str) -> Result<Option<PathBuf>, io::Error> {
@@ -169,7 +166,7 @@ fn search_parents(files: &[PathBuf]) -> Option<Cow<'static, Path>> {
     None
 }
 
-fn log_command(name: &str, command: &Command) {
+fn log_command(command: &Command) {
     let program = command.get_program().to_str().expect(
         "program should be UTF-8 when it was made from UTF-8 originally",
     );
@@ -182,7 +179,10 @@ fn log_command(name: &str, command: &Command) {
         .get_current_dir()
         .filter(|cwd| *cwd != *CWD)
         .map_or(String::new(), |cwd| format!(" in {}", cwd.display()));
-    info!("spawning {name} by running: `{program} {args}`{cwd}");
+    info!(
+        "spawning {} by running: `{program} {args}`{cwd}",
+        NAME.as_ref(),
+    );
 }
 
 #[derive(Debug, Deserialize)]
