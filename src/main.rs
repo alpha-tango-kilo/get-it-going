@@ -115,8 +115,14 @@ fn _main() -> anyhow::Result<()> {
     // Step 4: build and spawn process
     let program: Cow<Path> = match &config.run {
         Run::SubcommandOf(this) => Path::new(this).into(),
-        // TODO: need to add .exe for Windows
-        Run::PrependFolder(folder) => folder.join(NAME.as_ref()).into(),
+        Run::PrependFolder(folder) => {
+            let exe_name: Cow<str> = if cfg!(windows) {
+                format!("{}.exe", NAME.as_ref()).into()
+            } else {
+                NAME.as_ref().into()
+            };
+            folder.join(Path::new(exe_name.as_ref())).into()
+        },
         Run::Executable(this) => this.into(),
     };
     let mut command = Command::new(program.as_os_str());
