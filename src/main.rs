@@ -267,17 +267,10 @@ impl<'de> Deserialize<'de> for Run {
                 match key.as_str() {
                     "subcommand_of" => Ok(Run::SubcommandOf(value)),
                     "path" => {
-                        let path = PathBuf::from(value);
-                        // FIXME: can't necessarily do this now if there's
-                        //        pre-run stuff this depends on
-                        if path.is_dir() {
-                            Ok(Run::PrependFolder(path))
-                        } else if path.is_file() {
-                            Ok(Run::Executable(path))
+                        if value.ends_with('/') {
+                            Ok(Run::PrependFolder(value.into()))
                         } else {
-                            Err(A::Error::custom(
-                                "invalid path (not folder or file)",
-                            ))
+                            Ok(Run::Executable(value.into()))
                         }
                     },
                     unknown => Err(A::Error::custom(format_args!(
