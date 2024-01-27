@@ -61,8 +61,8 @@ fn _main(name: &str) -> anyhow::Result<()> {
         .with_context(|| format!("couldn't read {}", config_file.display()))?;
     let config = toml::from_str::<AppConfig>(&config)?;
 
-    // Step 2: work out if we're good to go
-    let _root = if !config.required_files.is_empty() {
+    // Step 2: work out if we're good to go, and where to run from
+    let root = if !config.required_files.is_empty() {
         if config.search_parents {
             search_parents(env::current_dir()?, &config.required_files)
                 .ok_or_else(|| {
@@ -93,7 +93,10 @@ fn _main(name: &str) -> anyhow::Result<()> {
         },
         BeforeRun::ScriptPath(path) => Command::new(path),
     };
-    let status = command.status().context("failed to run before_run")?;
+    let status = command
+        .current_dir(&root)
+        .status()
+        .context("failed to run before_run")?;
     if !status.success() {
         // TODO: include exit code?
         bail!("before_run returned a non-zero status");
@@ -110,6 +113,7 @@ fn _main(name: &str) -> anyhow::Result<()> {
         command.arg(name);
     }
     command.args(env::args_os().skip(1));
+    command.current_dir(root);
     log_command(name, &command);
     command.spawn().context("failed to run")?;
     Ok(())
@@ -167,7 +171,14 @@ fn log_command(name: &str, command: &Command) {
         .map(OsStr::to_string_lossy)
         .collect::<Vec<_>>();
     let args = args.join(" ");
-    info!("spawning {name} by running: {program} {args}");
+    let cwd = command
+        .get_current_dir()
+        .filter(|cwd| {
+            *cwd != env::current_dir()
+                .expect("should have already been accessed")
+        })
+        .map_or(String::new(), |cwd| format!(" in {}", cwd.display()));
+    info!("spawning {name} by running: `{program} {args}`{cwd}");
 }
 
 #[derive(Debug, Deserialize)]
