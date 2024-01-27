@@ -10,14 +10,15 @@ license = "GPL-3.0-only"
 repository = "https://codeberg.org/alpha-tango-kilo/get-it-going"
 
 [dependencies]
-anyhow = "1.0.75"
-dirs = "5.0.1"
-log = "0.4.20"
-serde = { version = "1.0.192", features = ["derive"] }
-shlex = "1.2.0"
+anyhow = "1.0"
+dirs = "5.0"
+log = "0.4"
+serde = { version = "1", features = ["derive"] }
+shlex = "1.2"
 
 [dependencies.env_logger]
-version = "0.10.1"
+# 0.11 removes the color/styling API I was using :(
+version = "0.10"
 default-features = false
 features = [
     "auto-color",
@@ -32,7 +33,7 @@ features = [
 ]
 
 [dependencies.toml]
-version = "0.8.8"
+version = "0.8"
 default-features = false
 features = [
     "parse",
