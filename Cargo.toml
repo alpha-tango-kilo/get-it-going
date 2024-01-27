@@ -23,6 +23,14 @@ features = [
     "auto-color",
 ]
 
+[dependencies.once_cell]
+version = "1.19"
+default-features = false
+features = [
+    "alloc",
+    "std",
+]
+
 [dependencies.toml]
 version = "0.8.8"
 default-features = false

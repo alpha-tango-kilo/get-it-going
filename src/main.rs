@@ -11,11 +11,17 @@ use std::{
 use anyhow::{anyhow, bail, Context};
 use env_logger::{fmt::Color, Env};
 use log::{debug, error, info, Level, LevelFilter};
+use once_cell::sync::Lazy;
 use serde::{
     de::{Error, MapAccess, Visitor},
     Deserialize, Deserializer,
 };
 use shlex::Shlex;
+
+static CWD: Lazy<PathBuf> = Lazy::new(|| {
+    env::current_dir()
+        .expect("get-it-going must have access to current working directory")
+});
 
 fn main() -> ExitCode {
     let name = get_name();
@@ -64,23 +70,21 @@ fn _main(name: &str) -> anyhow::Result<()> {
     // Step 2: work out if we're good to go, and where to run from
     let root = if !config.required_files.is_empty() {
         if config.search_parents {
-            search_parents(env::current_dir()?, &config.required_files)
-                .ok_or_else(|| {
-                    anyhow!(
-                        "couldn't find required files in current or parent \
-                         directories"
-                    )
-                })?
+            search_parents(&config.required_files).ok_or_else(|| {
+                anyhow!(
+                    "couldn't find required files in current or parent \
+                     directories"
+                )
+            })?
         } else {
-            let current_dir = env::current_dir()?;
-            files_exist_in(&current_dir, &config.required_files)
-                .then_some(current_dir)
+            files_exist_in(&*CWD, &config.required_files)
+                .then_some(Cow::<Path>::Borrowed(&*CWD))
                 .ok_or_else(|| {
                     anyhow!("couldn't find required files in current directory")
                 })?
         }
     } else {
-        env::current_dir()?
+        Cow::<Path>::Borrowed(&*CWD)
     };
 
     // Step 3: run before_run task/script
@@ -132,7 +136,10 @@ fn get_name() -> Box<str> {
 fn find_config(name: &str) -> Result<Option<PathBuf>, io::Error> {
     let config_name = format!("{name}.toml");
     // TODO: are these dirs any good?
-    for folder in [env::current_dir()?, dirs::config_dir().unwrap()] {
+    for folder in [
+        Cow::<Path>::Borrowed(&CWD),
+        dirs::config_dir().unwrap().into(),
+    ] {
         let config_file = folder.join(&config_name);
         debug!("checking if {} exists", config_file.display());
         if config_file.exists() {
@@ -148,15 +155,15 @@ fn files_exist_in(dir: impl AsRef<Path>, files: &[PathBuf]) -> bool {
     files.iter().all(|file_name| dir.join(file_name).exists())
 }
 
-fn search_parents(dir: impl AsRef<Path>, files: &[PathBuf]) -> Option<PathBuf> {
-    let mut dir = dir.as_ref();
+fn search_parents(files: &[PathBuf]) -> Option<Cow<'static, Path>> {
+    let mut dir: &Path = &CWD;
     if files_exist_in(dir, files) {
-        return Some(dir.to_owned());
+        return Some(dir.into());
     }
     while let Some(parent) = dir.parent() {
         dir = parent;
         if files_exist_in(dir, files) {
-            return Some(dir.to_owned());
+            return Some(dir.to_owned().into());
         }
     }
     None
@@ -173,10 +180,7 @@ fn log_command(name: &str, command: &Command) {
     let args = args.join(" ");
     let cwd = command
         .get_current_dir()
-        .filter(|cwd| {
-            *cwd != env::current_dir()
-                .expect("should have already been accessed")
-        })
+        .filter(|cwd| *cwd != *CWD)
         .map_or(String::new(), |cwd| format!(" in {}", cwd.display()));
     info!("spawning {name} by running: `{program} {args}`{cwd}");
 }
