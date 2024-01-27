@@ -1,6 +1,6 @@
 executable_suffix := if os_family() == "windows" { ".exe" } else { "" }
 
-@default:
+@_default:
     just --list
 
 # Builds get-it-going and creates a renamed executable with a config file
