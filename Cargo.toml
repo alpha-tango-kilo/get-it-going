@@ -8,6 +8,7 @@ authors = ["alpha-tango-kilo <git@heyatk.com>"]
 readme = "README.md"
 license = "GPL-3.0-only"
 repository = "https://codeberg.org/alpha-tango-kilo/get-it-going"
+publish = false
 
 [dependencies]
 anyhow = "1.0"
