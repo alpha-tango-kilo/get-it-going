@@ -16,3 +16,6 @@ subcommand_of = "doit"
 # Or
 # full executable path
 # path = "venv/bin/fontbakery"
+
+[fallback]
+enabled = false

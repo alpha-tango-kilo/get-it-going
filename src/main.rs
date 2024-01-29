@@ -198,6 +198,8 @@ struct AppConfig {
     search_parents: bool,
     before_run: BeforeRun,
     run: Run,
+    #[serde(deserialize_with = "de_fallback")]
+    fallback: Option<Fallback>,
 }
 
 #[derive(Debug)]
@@ -303,5 +305,32 @@ impl<'de> Deserialize<'de> for Run {
         }
 
         deserializer.deserialize_map(RunVisitor)
+    }
+}
+
+#[derive(Debug)]
+struct Fallback;
+
+fn de_fallback<'de, D>(deserializer: D) -> Result<Option<Fallback>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    deserializer.deserialize_option(FallbackVisitor)
+}
+
+struct FallbackVisitor;
+
+impl<'de> Visitor<'de> for FallbackVisitor {
+    type Value = Option<Fallback>;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_str("run table")
+    }
+
+    fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
+    where
+        A: MapAccess<'de>,
+    {
+        todo!()
     }
 }
