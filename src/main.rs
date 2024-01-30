@@ -198,7 +198,7 @@ struct AppConfig {
     search_parents: bool,
     before_run: BeforeRun,
     run: Run,
-    #[serde(deserialize_with = "de_fallback")]
+    #[serde(default)]
     fallback: Option<Fallback>,
 }
 
@@ -308,29 +308,18 @@ impl<'de> Deserialize<'de> for Run {
     }
 }
 
-#[derive(Debug)]
-struct Fallback;
+#[derive(Debug, Deserialize)]
+struct Fallback {}
 
-fn de_fallback<'de, D>(deserializer: D) -> Result<Option<Fallback>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    deserializer.deserialize_option(FallbackVisitor)
-}
+#[cfg(test)]
+mod unit_tests {
+    use crate::AppConfig;
 
-struct FallbackVisitor;
-
-impl<'de> Visitor<'de> for FallbackVisitor {
-    type Value = Option<Fallback>;
-
-    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        formatter.write_str("run table")
-    }
-
-    fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
-    where
-        A: MapAccess<'de>,
-    {
-        todo!()
+    #[test]
+    fn deserialise_example() {
+        let app_config =
+            toml::from_str::<AppConfig>(include_str!("../config.example.toml"))
+                .expect("should deserialise");
+        dbg!(app_config);
     }
 }
