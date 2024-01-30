@@ -18,4 +18,4 @@ subcommand_of = "doit"
 # path = "venv/bin/fontbakery"
 
 [fallback]
-enabled = false
+path = "/usr/sbin/fontbakery"

@@ -309,7 +309,9 @@ impl<'de> Deserialize<'de> for Run {
 }
 
 #[derive(Debug, Deserialize)]
-struct Fallback {}
+struct Fallback {
+    path: PathBuf,
+}
 
 #[cfg(test)]
 mod unit_tests {
