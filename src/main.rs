@@ -68,69 +68,20 @@ fn main() -> ExitCode {
 
 fn _main() -> anyhow::Result<()> {
     // Step 1: read config
-    let config_file = find_config(&NAME)?
-        .ok_or_else(|| anyhow!("unable to find config file"))?;
-    let config = fs::read_to_string(&config_file)
-        .with_context(|| format!("couldn't read {}", config_file.display()))?;
-    let config = toml::from_str::<AppConfig>(&config)?;
+    let config = AppConfig::find_and_load()?;
 
     // Step 2: work out if we're good to go, and where to run from
-    let root = if !config.required_files.is_empty() {
-        if config.search_parents {
-            search_parents(&config.required_files).ok_or_else(|| {
-                anyhow!(
-                    "couldn't find required files in current or parent \
-                     directories"
-                )
-            })?
-        } else {
-            files_exist_in(&*CWD, &config.required_files)
-                .then_some(Cow::<Path>::Borrowed(&*CWD))
-                .ok_or_else(|| {
-                    anyhow!("couldn't find required files in current directory")
-                })?
-        }
-    } else {
-        Cow::<Path>::Borrowed(&*CWD)
-    };
+    let root = config.get_root()?;
 
     // Step 3: run before_run task/script
-    let mut command = match &config.before_run {
-        BeforeRun::Command(cmd_str) => {
-            let mut iter = Shlex::new(cmd_str);
-            let mut command = Command::new(iter.next().unwrap());
-            command.args(iter);
-            command
-        },
-        BeforeRun::ScriptPath(path) => Command::new(path),
-    };
-    let status = command
-        .current_dir(&root)
-        .status()
-        .context("failed to run before_run")?;
+    let mut command = config.generate_before_run(&root);
+    let status = command.status().context("failed to run before_run")?;
     if !status.success() {
         bail!("before_run returned a non-zero status");
     }
 
     // Step 4: build and spawn process
-    let program: Cow<Path> = match &config.run {
-        Run::SubcommandOf(this) => Path::new(this).into(),
-        Run::PrependFolder(folder) => {
-            let exe_name: Cow<str> = if cfg!(windows) {
-                format!("{}.exe", NAME.as_ref()).into()
-            } else {
-                NAME.as_ref().into()
-            };
-            folder.join(Path::new(exe_name.as_ref())).into()
-        },
-        Run::Executable(this) => this.into(),
-    };
-    let mut command = Command::new(program.as_os_str());
-    if matches!(&config.run, Run::SubcommandOf(_)) {
-        command.arg(NAME.as_ref());
-    }
-    command.args(env::args_os().skip(1));
-    command.current_dir(root);
+    let mut command = config.generate_run(&root);
     log_command(&command);
     command.spawn().context("failed to run")?;
     Ok(())
@@ -200,6 +151,77 @@ struct AppConfig {
     run: Run,
     #[serde(default)]
     fallback: Option<Fallback>,
+}
+
+impl AppConfig {
+    fn find_and_load() -> anyhow::Result<Self> {
+        let config_file = find_config(&NAME)?
+            .ok_or_else(|| anyhow!("unable to find config file"))?;
+        let config = fs::read_to_string(&config_file).with_context(|| {
+            format!("couldn't read {}", config_file.display())
+        })?;
+        Ok(toml::from_str::<AppConfig>(&config)?)
+    }
+
+    fn get_root(&self) -> anyhow::Result<Cow<Path>> {
+        if !self.required_files.is_empty() {
+            if self.search_parents {
+                search_parents(&self.required_files).ok_or_else(|| {
+                    anyhow!(
+                        "couldn't find required files in current or parent \
+                         directories"
+                    )
+                })
+            } else {
+                files_exist_in(&*CWD, &self.required_files)
+                    .then_some(Cow::<Path>::Borrowed(&*CWD))
+                    .ok_or_else(|| {
+                        anyhow!(
+                            "couldn't find required files in current directory"
+                        )
+                    })
+            }
+        } else {
+            Ok(Cow::<Path>::Borrowed(&*CWD))
+        }
+    }
+
+    fn generate_before_run(&self, root: impl AsRef<Path>) -> Command {
+        let mut command = match &self.before_run {
+            BeforeRun::Command(cmd_str) => {
+                let mut iter = Shlex::new(cmd_str);
+                let mut command = Command::new(iter.next().unwrap());
+                command.args(iter);
+                command
+            },
+            BeforeRun::ScriptPath(path) => Command::new(path),
+        };
+        command.current_dir(root);
+        command
+    }
+
+    fn generate_run(&self, root: impl AsRef<Path>) -> Command {
+        let program: Cow<Path> = match &self.run {
+            Run::SubcommandOf(this) => Path::new(this).into(),
+            Run::PrependFolder(folder) => {
+                let exe_name: Cow<str> = if cfg!(windows) {
+                    format!("{}.exe", NAME.as_ref()).into()
+                } else {
+                    NAME.as_ref().into()
+                };
+                folder.join(Path::new(exe_name.as_ref())).into()
+            },
+            Run::Executable(this) => this.into(),
+        };
+
+        let mut command = Command::new(program.as_os_str());
+        if matches!(&self.run, Run::SubcommandOf(_)) {
+            command.arg(NAME.as_ref());
+        }
+        command.args(env::args_os().skip(1));
+        command.current_dir(root);
+        command
+    }
 }
 
 #[derive(Debug)]
