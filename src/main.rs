@@ -5,7 +5,8 @@ use std::{
     fmt, fs, io,
     io::Write,
     path::{Path, PathBuf},
-    process::{Command, ExitCode},
+    process,
+    process::{Command, ExitCode, ExitStatus},
 };
 
 use anyhow::{anyhow, bail, Context};
@@ -74,15 +75,14 @@ fn _main() -> anyhow::Result<()> {
     let root = config.get_root()?;
 
     // Step 3: run before_run task/script
-    let mut command = config.generate_before_run(&root);
+    let command = config.generate_before_run(&root);
     let status = command.status().context("failed to run before_run")?;
     if !status.success() {
         bail!("before_run returned a non-zero status");
     }
 
     // Step 4: build and spawn process
-    let mut command = config.generate_run(&root);
-    log_command(&command);
+    let command = config.generate_run(&root);
     command.spawn().context("failed to run")?;
     Ok(())
 }
@@ -121,25 +121,6 @@ fn search_parents(files: &[PathBuf]) -> Option<Cow<'static, Path>> {
         }
     }
     None
-}
-
-fn log_command(command: &Command) {
-    let program = command.get_program().to_str().expect(
-        "program should be UTF-8 when it was made from UTF-8 originally",
-    );
-    let args = command
-        .get_args()
-        .map(OsStr::to_string_lossy)
-        .collect::<Vec<_>>();
-    let args = args.join(" ");
-    let cwd = command
-        .get_current_dir()
-        .filter(|cwd| *cwd != *CWD)
-        .map_or(String::new(), |cwd| format!(" in {}", cwd.display()));
-    info!(
-        "spawning {} by running: `{program} {args}`{cwd}",
-        NAME.as_ref(),
-    );
 }
 
 #[derive(Debug, Deserialize)]
@@ -186,7 +167,7 @@ impl AppConfig {
         }
     }
 
-    fn generate_before_run(&self, root: impl AsRef<Path>) -> Command {
+    fn generate_before_run(&self, root: impl AsRef<Path>) -> LoggedCommand {
         let mut command = match &self.before_run {
             BeforeRun::Command(cmd_str) => {
                 let mut iter = Shlex::new(cmd_str);
@@ -197,10 +178,10 @@ impl AppConfig {
             BeforeRun::ScriptPath(path) => Command::new(path),
         };
         command.current_dir(root);
-        command
+        LoggedCommand(command)
     }
 
-    fn generate_run(&self, root: impl AsRef<Path>) -> Command {
+    fn generate_run(&self, root: impl AsRef<Path>) -> LoggedCommand {
         let program: Cow<Path> = match &self.run {
             Run::SubcommandOf(this) => Path::new(this).into(),
             Run::PrependFolder(folder) => {
@@ -220,7 +201,7 @@ impl AppConfig {
         }
         command.args(env::args_os().skip(1));
         command.current_dir(root);
-        command
+        LoggedCommand(command)
     }
 }
 
@@ -345,5 +326,41 @@ mod unit_tests {
             toml::from_str::<AppConfig>(include_str!("../config.example.toml"))
                 .expect("should deserialise");
         dbg!(app_config);
+    }
+}
+
+#[derive(Debug)]
+struct LoggedCommand(Command);
+
+impl LoggedCommand {
+    fn log(&self) {
+        let program = self.0.get_program().to_str().expect(
+            "program should be UTF-8 when it was made from UTF-8 originally",
+        );
+        let args = self
+            .0
+            .get_args()
+            .map(OsStr::to_string_lossy)
+            .collect::<Vec<_>>();
+        let args = args.join(" ");
+        let cwd = self
+            .0
+            .get_current_dir()
+            .filter(|cwd| *cwd != *CWD)
+            .map_or(String::new(), |cwd| format!(" in {}", cwd.display()));
+        info!(
+            "spawning {} by running: `{program} {args}`{cwd}",
+            NAME.as_ref(),
+        );
+    }
+
+    fn status(mut self) -> io::Result<ExitStatus> {
+        self.log();
+        self.0.status()
+    }
+
+    fn spawn(mut self) -> io::Result<process::Child> {
+        self.log();
+        self.0.spawn()
     }
 }
