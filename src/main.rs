@@ -325,19 +325,6 @@ struct Fallback {
     path: PathBuf,
 }
 
-#[cfg(test)]
-mod unit_tests {
-    use crate::AppConfig;
-
-    #[test]
-    fn deserialise_example() {
-        let app_config =
-            toml::from_str::<AppConfig>(include_str!("../config.example.toml"))
-                .expect("should deserialise");
-        dbg!(app_config);
-    }
-}
-
 #[derive(Debug)]
 struct LoggedCommand(Command);
 
@@ -371,5 +358,18 @@ impl LoggedCommand {
     fn spawn(mut self) -> io::Result<process::Child> {
         self.log();
         self.0.spawn()
+    }
+}
+
+#[cfg(test)]
+mod unit_tests {
+    use crate::AppConfig;
+
+    #[test]
+    fn deserialise_example() {
+        let app_config =
+            toml::from_str::<AppConfig>(include_str!("../config.example.toml"))
+                .expect("should deserialise");
+        dbg!(app_config);
     }
 }
