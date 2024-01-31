@@ -11,7 +11,7 @@ use std::{
 
 use anyhow::{anyhow, bail, Context};
 use env_logger::{fmt::Color, Env};
-use log::{debug, error, info, Level, LevelFilter};
+use log::{debug, error, info, warn, Level, LevelFilter};
 use once_cell::sync::Lazy;
 use serde::{
     de::{Error, MapAccess, Visitor},
@@ -72,7 +72,18 @@ fn _main() -> anyhow::Result<()> {
     let config = AppConfig::find_and_load()?;
 
     // Step 2: work out if we're good to go, and where to run from
-    let root = config.get_root()?;
+    let root = match config.get_root() {
+        Some(root) => root,
+        // If we're not good to go, do we have a fallback to run instead?
+        None => match config.generate_fallback() {
+            Some(command) => {
+                warn!("unable to locate required files, running fallback");
+                command.spawn().context("failed to run")?;
+                return Ok(());
+            },
+            None => bail!("couldn't find required files"),
+        },
+    };
 
     // Step 3: run before_run task/script
     let command = config.generate_before_run(&root);
@@ -144,26 +155,16 @@ impl AppConfig {
         Ok(toml::from_str::<AppConfig>(&config)?)
     }
 
-    fn get_root(&self) -> anyhow::Result<Cow<Path>> {
+    fn get_root(&self) -> Option<Cow<Path>> {
         if !self.required_files.is_empty() {
             if self.search_parents {
-                search_parents(&self.required_files).ok_or_else(|| {
-                    anyhow!(
-                        "couldn't find required files in current or parent \
-                         directories"
-                    )
-                })
+                search_parents(&self.required_files)
             } else {
                 files_exist_in(&*CWD, &self.required_files)
                     .then_some(Cow::<Path>::Borrowed(&*CWD))
-                    .ok_or_else(|| {
-                        anyhow!(
-                            "couldn't find required files in current directory"
-                        )
-                    })
             }
         } else {
-            Ok(Cow::<Path>::Borrowed(&*CWD))
+            Some(Cow::<Path>::Borrowed(&*CWD))
         }
     }
 
@@ -202,6 +203,14 @@ impl AppConfig {
         command.args(env::args_os().skip(1));
         command.current_dir(root);
         LoggedCommand(command)
+    }
+
+    fn generate_fallback(&self) -> Option<LoggedCommand> {
+        self.fallback.as_ref().map(|fallback| {
+            let mut command = Command::new(&fallback.path);
+            command.args(env::args_os().skip(1));
+            LoggedCommand(command)
+        })
     }
 }
 
