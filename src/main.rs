@@ -136,6 +136,7 @@ fn search_parents(files: &[PathBuf]) -> Option<Cow<'static, Path>> {
 
 #[derive(Debug, Deserialize)]
 struct AppConfig {
+    #[serde(default)]
     required_files: Vec<PathBuf>,
     #[serde(default)]
     search_parents: bool,
