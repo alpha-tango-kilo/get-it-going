@@ -152,7 +152,9 @@ impl AppConfig {
         let config = fs::read_to_string(&config_file).with_context(|| {
             format!("couldn't read {}", config_file.display())
         })?;
-        Ok(toml::from_str::<AppConfig>(&config)?)
+        let config = toml::from_str::<AppConfig>(&config)?;
+        config.lint();
+        Ok(config)
     }
 
     fn get_root(&self) -> Option<Cow<Path>> {
@@ -211,6 +213,17 @@ impl AppConfig {
             command.args(env::args_os().skip(1));
             LoggedCommand(command)
         })
+    }
+
+    fn lint(&self) {
+        if self.required_files.is_empty() && self.search_parents {
+            warn!(
+                "search_parents has no effect if there are no required files"
+            );
+        }
+        if self.required_files.is_empty() && self.fallback.is_some() {
+            warn!("fallback has no effect if there are no required files");
+        }
     }
 }
 
