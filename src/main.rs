@@ -18,12 +18,25 @@ use serde::{
 };
 use shlex::Shlex;
 
+#[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
+compile_error!("unsupported OS: only Windows, MacOS, and Linux currently");
+
 static NAME: Lazy<Box<str>> = Lazy::new(|| match env::var("GIG_OVERRIDE") {
     Ok(name) => name.into_boxed_str(),
     Err(_) => {
         let executable = env::current_exe().unwrap();
         executable.file_stem().unwrap().to_string_lossy().into()
     },
+});
+
+static SYSTEM_WIDE_CONFIG_DIRECTORY: Lazy<PathBuf> = Lazy::new(|| {
+    #[cfg(windows)]
+    let system_config_dir = Path::new("C:\\Program Files\\Common Files");
+    #[cfg(target_os = "macos")]
+    let system_config_dir = Path::new("/Library/Application Support");
+    #[cfg(target_os = "linux")]
+    let system_config_dir = Path::new("/etc");
+    system_config_dir.join("get-it-going")
 });
 
 static CWD: Lazy<PathBuf> = Lazy::new(|| {
@@ -113,11 +126,7 @@ fn _main() -> anyhow::Result<ExitStatus> {
 
 fn find_config(name: &str) -> Result<Option<PathBuf>, io::Error> {
     let config_name = format!("{name}.toml");
-    // TODO: are these dirs any good?
-    for folder in [
-        Cow::<Path>::Borrowed(&CWD),
-        dirs::config_dir().unwrap().into(),
-    ] {
+    for folder in [&*CWD, &*SYSTEM_WIDE_CONFIG_DIRECTORY] {
         let config_file = folder.join(&config_name);
         debug!("checking if {} exists", config_file.display());
         if config_file.exists() {

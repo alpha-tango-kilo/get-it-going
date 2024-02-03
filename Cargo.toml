@@ -12,13 +12,12 @@ publish = false
 
 [dependencies]
 anyhow = "1.0"
-dirs = "5.0"
 log = "0.4"
 serde = { version = "1", features = ["derive"] }
 shlex = "1.2"
 
 [dependencies.env_logger]
-# 0.11 removes the color/styling API I was using :(
+# 0.11 removes the color/styling API I am using :(
 version = "0.10"
 default-features = false
 features = [
