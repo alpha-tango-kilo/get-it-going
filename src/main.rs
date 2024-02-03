@@ -89,8 +89,8 @@ fn _main() -> anyhow::Result<ExitStatus> {
         // If we're not good to go, do we have a fallback to run instead?
         None => match config.generate_fallback() {
             Some(command) => {
-                warn!("unable to locate required files, running fallback");
-                let status = command.status().context("failed to run")?;
+                info!("unable to locate required files, running fallback");
+                let status = command.status()?;
                 return Ok(status);
             },
             None => bail!("couldn't find required files"),
@@ -105,9 +105,9 @@ fn _main() -> anyhow::Result<ExitStatus> {
     }
 
     // Step 4: build and spawn process
-    let mut command = config.generate_run(&root);
+    let command = config.generate_run(&root);
     // TODO: better error message
-    let status = command.status().context("failed to run")?;
+    let status = command.status()?;
     Ok(status)
 }
 
@@ -357,6 +357,19 @@ struct LoggedCommand(Command);
 
 impl LoggedCommand {
     fn log(&self) {
+        info!("spawning {} by running: {self}", NAME.as_ref());
+    }
+
+    fn status(mut self) -> anyhow::Result<ExitStatus> {
+        self.log();
+        self.0
+            .status()
+            .with_context(|| format!("failed to invoke {self}"))
+    }
+}
+
+impl fmt::Display for LoggedCommand {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let program = self.0.get_program().to_str().expect(
             "program should be UTF-8 when it was made from UTF-8 originally",
         );
@@ -364,27 +377,14 @@ impl LoggedCommand {
             .0
             .get_args()
             .map(OsStr::to_string_lossy)
-            .collect::<Vec<_>>();
-        let args = args.join(" ");
+            .collect::<Vec<_>>()
+            .join(" ");
         let cwd = self
             .0
             .get_current_dir()
             .filter(|cwd| *cwd != *CWD)
             .map_or(String::new(), |cwd| format!(" in {}", cwd.display()));
-        info!(
-            "spawning {} by running: `{program} {args}`{cwd}",
-            NAME.as_ref(),
-        );
-    }
-
-    fn status(mut self) -> io::Result<ExitStatus> {
-        self.log();
-        self.0.status()
-    }
-
-    fn spawn(mut self) -> io::Result<process::Child> {
-        self.log();
-        self.0.spawn()
+        write!(f, "`{program} {args}`{cwd}")
     }
 }
 
