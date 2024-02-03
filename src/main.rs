@@ -5,7 +5,6 @@ use std::{
     fmt, fs, io,
     io::Write,
     path::{Path, PathBuf},
-    process,
     process::{Command, ExitCode, ExitStatus},
 };
 
@@ -60,14 +59,27 @@ fn main() -> ExitCode {
         })
         .init();
 
-    if let Err(why) = _main() {
-        error!("unable to launch {}: {why}", NAME.as_ref());
-        return ExitCode::FAILURE;
+    match _main() {
+        Ok(status) => {
+            // Some scuff to get i32 exit codes into u8 without wrapping to
+            // non-zero to zero
+            let orig_code = status.code();
+            let exit_code = orig_code
+                .unwrap_or(!status.success() as i32)
+                .unsigned_abs() as u8;
+            debug!(
+                "exited with status {orig_code:?}, converted to {exit_code}",
+            );
+            ExitCode::from(exit_code)
+        },
+        Err(why) => {
+            error!("unable to launch {}: {why}", NAME.as_ref());
+            ExitCode::FAILURE
+        },
     }
-    ExitCode::SUCCESS
 }
 
-fn _main() -> anyhow::Result<()> {
+fn _main() -> anyhow::Result<ExitStatus> {
     // Step 1: read config
     let config = AppConfig::find_and_load()?;
 
@@ -78,8 +90,8 @@ fn _main() -> anyhow::Result<()> {
         None => match config.generate_fallback() {
             Some(command) => {
                 warn!("unable to locate required files, running fallback");
-                command.spawn().context("failed to run")?;
-                return Ok(());
+                let status = command.status().context("failed to run")?;
+                return Ok(status);
             },
             None => bail!("couldn't find required files"),
         },
@@ -93,9 +105,10 @@ fn _main() -> anyhow::Result<()> {
     }
 
     // Step 4: build and spawn process
-    let command = config.generate_run(&root);
-    command.spawn().context("failed to run")?;
-    Ok(())
+    let mut command = config.generate_run(&root);
+    // TODO: better error message
+    let status = command.status().context("failed to run")?;
+    Ok(status)
 }
 
 fn find_config(name: &str) -> Result<Option<PathBuf>, io::Error> {
