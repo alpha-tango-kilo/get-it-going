@@ -10,7 +10,7 @@ For sake of example, let's say you have a Python tool `wrench` that needs to be 
 
 GIG is designed to be installed system-wide in the user's path under the same name as the target program.
 Thus, you compile GIG and rename the executable `wrench`, and distribute/install it.
-Then either in your project folder, or in the system-wide configurations folder (location TBD), you create a `wrench.toml` configuration file, that looks something like this:
+Then either in your project folder, or in the system-wide configurations folder, you create a `wrench.toml` configuration file, that looks something like this:
 
 ```toml
 required_files = [
@@ -33,6 +33,16 @@ Now, when a user invokes `wrench` in a folder, GIG checks for the existence of t
 2. Run `just ship <name>` (if you don't have [just](https://github.com/casey/just) installed, just run the commands under the `ship:` heading manually)
 3. Edit the created `<name>.toml` file to your needs
 4. Distribute/Install the executable on users' machines (along with the configuration if opting for system-wide configuration)
+
+### System-wide configuration locations
+
+Bear in mind, the configuration files need to be readable to the user running the get-it-going executable, not just administrators
+
+| Operating system | Directory                                    |
+|------------------|----------------------------------------------|
+| Windows          | `C:\Program Files\Common Files\get-it-going` |
+| MacOS            | `/Library/Application Support/get-it-going`  |
+| Linux            | `/etc/get-it-going`                          |
 
 ## How heavy is the executable?
 
