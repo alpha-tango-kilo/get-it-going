@@ -199,7 +199,7 @@ impl AppConfig {
         }
     }
 
-    fn generate_before_run(&self, root: impl AsRef<Path>) -> LoggedCommand {
+    fn generate_before_run(&self, root: &Path) -> LoggedCommand {
         let mut command = match &self.before_run {
             BeforeRun::Command(cmd_str) => {
                 let mut iter = Shlex::new(cmd_str);
@@ -213,7 +213,7 @@ impl AppConfig {
         LoggedCommand(command)
     }
 
-    fn generate_run(&self, root: impl AsRef<Path>) -> LoggedCommand {
+    fn generate_run(&self, root: &Path) -> LoggedCommand {
         let program: Cow<Path> = match &self.run {
             Run::SubcommandOf(this) => Path::new(this).into(),
             Run::PrependFolder(folder) => {
