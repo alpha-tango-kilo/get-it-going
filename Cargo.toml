@@ -45,3 +45,8 @@ lto = true
 codegen-units = 1
 panic = "abort"
 strip = true
+
+[profile.fast]
+inherits = "release"
+opt-level = 3
+panic = "unwind"
