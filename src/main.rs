@@ -5,13 +5,14 @@ use std::{
     borrow::Cow,
     env,
     ffi::OsStr,
-    fmt, fs, io,
+    fmt, fs,
     io::Write,
+    ops::ControlFlow,
     path::{Path, PathBuf},
     process::{Command, ExitCode, ExitStatus},
 };
 
-use anyhow::{anyhow, bail, Context};
+use anyhow::{bail, Context};
 use env_logger::{fmt::Color, Env};
 use log::{debug, error, info, warn, Level, LevelFilter};
 use once_cell::sync::Lazy;
@@ -127,19 +128,6 @@ fn _main() -> anyhow::Result<ExitStatus> {
     Ok(status)
 }
 
-fn find_config(name: &str) -> Result<Option<PathBuf>, io::Error> {
-    let config_name = format!("{name}.toml");
-    for folder in [&*CWD, &*SYSTEM_WIDE_CONFIG_DIRECTORY] {
-        let config_file = folder.join(&config_name);
-        debug!("checking if {} exists", config_file.display());
-        if config_file.exists() {
-            info!("found {}", config_file.display());
-            return Ok(Some(config_file));
-        }
-    }
-    Ok(None)
-}
-
 fn files_exist_in(dir: impl AsRef<Path>, files: &[PathBuf]) -> bool {
     let dir = dir.as_ref();
     files.iter().all(|file_name| dir.join(file_name).exists())
@@ -173,8 +161,23 @@ struct AppConfig {
 
 impl AppConfig {
     fn find_and_load() -> anyhow::Result<Self> {
-        let config_file = find_config(&NAME)?
-            .ok_or_else(|| anyhow!("unable to find config file"))?;
+        let config_name = format!("{}.toml", &*NAME);
+        let config_file_flow = [&*CWD, &*SYSTEM_WIDE_CONFIG_DIRECTORY]
+            .iter()
+            .try_for_each(|&dir| {
+                let config_file = dir.join(&config_name);
+                debug!("checking if {} exists", config_file.display());
+                if config_file.exists() {
+                    info!("found {}", config_file.display());
+                    return ControlFlow::Break(config_file);
+                }
+                ControlFlow::Continue(())
+            });
+        let config_file = match config_file_flow {
+            ControlFlow::Break(path) => path,
+            ControlFlow::Continue(()) => bail!("unable to find config file"),
+        };
+
         let config = fs::read_to_string(&config_file).with_context(|| {
             format!("couldn't read {}", config_file.display())
         })?;
