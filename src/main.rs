@@ -1,3 +1,6 @@
+#![deny(clippy::undocumented_unsafe_blocks)]
+#![deny(unsafe_op_in_unsafe_fn)]
+
 use std::{
     borrow::Cow,
     env,
@@ -24,7 +27,7 @@ compile_error!("unsupported OS: only Windows, MacOS, and Linux currently");
 static NAME: Lazy<Box<str>> = Lazy::new(|| match env::var("GIG_OVERRIDE") {
     Ok(name) => name.into_boxed_str(),
     Err(_) => {
-        let executable = env::current_exe().unwrap();
+        let executable = env::current_exe().expect("can't access own path");
         executable.file_stem().unwrap().to_string_lossy().into()
     },
 });
@@ -232,8 +235,49 @@ impl AppConfig {
 
     fn generate_fallback(&self) -> Option<LoggedCommand> {
         self.fallback.as_ref().map(|fallback| {
-            let mut command = Command::new(&fallback.path);
-            command.args(env::args_os().skip(1));
+            let command = match &fallback.path {
+                Some(path) => {
+                    let mut command = Command::new(path);
+                    command.args(env::args_os().skip(1));
+                    command
+                },
+                None => {
+                    // Re-run command without GIG in $PATH
+                    let gig_path = env::current_exe().unwrap();
+                    let gig_dir = gig_path
+                        .parent()
+                        .unwrap()
+                        .as_os_str()
+                        .as_encoded_bytes();
+
+                    let path = env::var_os("PATH").expect("$PATH unset");
+                    let path_bytes = path.as_encoded_bytes();
+                    let path_parts = path_bytes
+                        .split(|&byte| byte == b':')
+                        .filter(|&slice| slice != gig_dir)
+                        .map(|slice|
+                            // SAFETY: we are calling
+                            // OsStr::from_encoded_bytes_unchecked on bytes
+                            // made by OsStr::as_encoded_bytes, only having
+                            // split on valid UTF-8 characters.
+                            // Also, I'm basically doing the example code from
+                            // the Rust docs of
+                            // OsStr::from_encoded_bytes_unchecked lol
+                            unsafe { OsStr::from_encoded_bytes_unchecked(slice) }
+                        )
+                        .collect::<Vec<_>>();
+                    let new_path = path_parts.join(OsStr::new(":"));
+                    debug!(
+                        "$PATH before:\n{}\n$PATH after:\n{}",
+                        path.to_string_lossy(),
+                        new_path.to_string_lossy(),
+                    );
+
+                    let mut command = Command::new(NAME.as_ref());
+                    command.env("PATH", new_path).args(env::args_os().skip(1));
+                    command
+                },
+            };
             LoggedCommand(command)
         })
     }
@@ -358,7 +402,8 @@ impl<'de> Deserialize<'de> for Run {
 
 #[derive(Debug, Deserialize)]
 struct Fallback {
-    path: PathBuf,
+    #[serde(default)]
+    path: Option<PathBuf>,
 }
 
 #[derive(Debug)]

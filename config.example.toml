@@ -18,4 +18,5 @@ subcommand_of = "doit"
 # path = "venv/bin/fontbakery"
 
 [fallback]
+# Can be omitted to use the next entry in $PATH (excluding the get-it-going executable)
 path = "/usr/sbin/fontbakery"
