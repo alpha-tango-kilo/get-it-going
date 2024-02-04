@@ -55,7 +55,7 @@ At the time of writing (before a stable release), the final executable size is 4
 
 - [x] Add a `[fallback]` section to customise behaviour when `required_files` aren't found
 
-- ~~[ ] OS-specific values for command/path fields~~
+- [ ] ~~OS-specific values for command/path fields~~
 
 - [ ] GUI version, for GUI tools? :o
 
