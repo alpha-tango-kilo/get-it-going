@@ -128,25 +128,6 @@ fn _main() -> anyhow::Result<ExitStatus> {
     Ok(status)
 }
 
-fn files_exist_in(dir: impl AsRef<Path>, files: &[PathBuf]) -> bool {
-    let dir = dir.as_ref();
-    files.iter().all(|file_name| dir.join(file_name).exists())
-}
-
-fn search_parents(files: &[PathBuf]) -> Option<Cow<'static, Path>> {
-    let mut dir: &Path = &CWD;
-    if files_exist_in(dir, files) {
-        return Some(dir.into());
-    }
-    while let Some(parent) = dir.parent() {
-        dir = parent;
-        if files_exist_in(dir, files) {
-            return Some(dir.to_owned().into());
-        }
-    }
-    None
-}
-
 #[derive(Debug, Deserialize)]
 struct AppConfig {
     #[serde(default)]
@@ -187,11 +168,30 @@ impl AppConfig {
     }
 
     fn get_root(&self) -> Option<Cow<Path>> {
+        let files_exist_in = |dir: &Path, files: &[PathBuf]| {
+            files.iter().all(|file_name| dir.join(file_name).exists())
+        };
+
         if !self.required_files.is_empty() {
             if self.search_parents {
-                search_parents(&self.required_files)
+                let mut dir: &Path = &CWD;
+                if files_exist_in(dir, &self.required_files) {
+                    return Some(dir.into());
+                }
+                // Can't use while-let with break values, so we overcome
+                loop {
+                    match dir.parent() {
+                        Some(dir)
+                            if files_exist_in(dir, &self.required_files) =>
+                        {
+                            break Some(dir.to_owned().into());
+                        },
+                        Some(new_dir) => dir = new_dir,
+                        None => break None,
+                    }
+                }
             } else {
-                files_exist_in(&*CWD, &self.required_files)
+                files_exist_in(&CWD, &self.required_files)
                     .then_some(Cow::<Path>::Borrowed(&*CWD))
             }
         } else {
@@ -300,7 +300,6 @@ impl AppConfig {
 #[derive(Debug)]
 enum BeforeRun {
     Command(String),
-    // TODO: is it even practical to support this?
     ScriptPath(PathBuf),
 }
 
