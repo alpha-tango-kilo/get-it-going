@@ -81,9 +81,9 @@ fn main() -> ExitCode {
             // Some scuff to get i32 exit codes into u8 without wrapping to
             // non-zero to zero
             let orig_code = status.code();
-            let exit_code = orig_code
-                .unwrap_or(!status.success() as i32)
-                .unsigned_abs() as u8;
+            let exit_code: u8 = orig_code
+                .map(|exit_code| exit_code.unsigned_abs() as _)
+                .unwrap_or(!status.success() as _);
             debug!(
                 "exited with status {orig_code:?}, converted to {exit_code}",
             );
@@ -123,7 +123,6 @@ fn _main() -> anyhow::Result<ExitStatus> {
 
     // Step 4: build and spawn process
     let command = config.generate_run(&root);
-    // TODO: better error message
     let status = command.status()?;
     Ok(status)
 }
