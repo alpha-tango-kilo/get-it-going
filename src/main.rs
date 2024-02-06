@@ -12,7 +12,7 @@ use std::{
     process::{Command, ExitCode, ExitStatus},
 };
 
-use anyhow::{bail, Context};
+use anyhow::{anyhow, bail, Context};
 use env_logger::{fmt::Color, Env};
 use log::{debug, error, info, warn, Level, LevelFilter};
 use once_cell::sync::Lazy;
@@ -82,8 +82,9 @@ fn main() -> ExitCode {
             // non-zero to zero
             let orig_code = status.code();
             let exit_code: u8 = orig_code
-                .map(|exit_code| exit_code.unsigned_abs() as _)
-                .unwrap_or(!status.success() as _);
+                .map_or(!status.success() as _, |exit_code| {
+                    exit_code.unsigned_abs() as _
+                });
             debug!(
                 "exited with status {orig_code:?}, converted to {exit_code}",
             );
@@ -101,17 +102,16 @@ fn _main() -> anyhow::Result<ExitStatus> {
     let config = AppConfig::find_and_load()?;
 
     // Step 2: work out if we're good to go, and where to run from
-    let root = match config.get_root() {
-        Some(root) => root,
+    let Some(root) = config.get_root() else {
         // If we're not good to go, do we have a fallback to run instead?
-        None => match config.generate_fallback() {
+        return match config.generate_fallback() {
             Some(command) => {
                 info!("unable to locate required files, running fallback");
                 let status = command.status()?;
-                return Ok(status);
+                Ok(status)
             },
-            None => bail!("couldn't find required files"),
-        },
+            None => Err(anyhow!("couldn't find required files")),
+        };
     };
 
     // Step 3: run before_run task/script
