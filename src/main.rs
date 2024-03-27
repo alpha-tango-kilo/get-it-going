@@ -246,13 +246,13 @@ impl AppConfig {
                 None => {
                     // Re-run command without GIG in $PATH
                     #[cfg(windows)]
-                    let path_sep = OsStr::new(";");
-                    #[cfg(not(windows))]
-                    let path_sep = OsStr::new(":");
-                    #[cfg(windows)]
                     const PATH_SEP_BYTE: u8 = b';';
                     #[cfg(not(windows))]
                     const PATH_SEP_BYTE: u8 = b':';
+                    #[cfg(windows)]
+                    let path_sep = OsStr::new(";");
+                    #[cfg(not(windows))]
+                    let path_sep = OsStr::new(":");
 
                     let gig_path = env::current_exe().unwrap();
                     let gig_dir = gig_path
@@ -265,7 +265,19 @@ impl AppConfig {
                     let path_bytes = path.as_encoded_bytes();
                     let path_parts = path_bytes
                         .split(|&byte| byte == PATH_SEP_BYTE)
-                        .filter(|&slice| slice != gig_dir)
+                        .filter(|&slice| {
+                            if cfg!(windows) {
+                                // Windows has to be case insensitive
+                                // These conversions compile to zero-cost I think so this is fine to just call here
+                                // SAFETY: see below in .map()
+                                let slice = unsafe { OsStr::from_encoded_bytes_unchecked(slice) };
+                                // SAFETY: this is an unmodified OsStr we called as_encoded_bytes() on
+                                let gig_dir = unsafe { OsStr::from_encoded_bytes_unchecked(gig_dir) };
+                                !slice.eq_ignore_ascii_case(gig_dir)
+                            } else {
+                                slice != gig_dir
+                            }
+                        })
                         .map(|slice|
                             // SAFETY: we are calling
                             // OsStr::from_encoded_bytes_unchecked on bytes
