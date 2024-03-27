@@ -245,6 +245,15 @@ impl AppConfig {
                 },
                 None => {
                     // Re-run command without GIG in $PATH
+                    #[cfg(windows)]
+                    let path_sep = OsStr::new(";");
+                    #[cfg(not(windows))]
+                    let path_sep = OsStr::new(":");
+                    #[cfg(windows)]
+                    const PATH_SEP_BYTE: u8 = b';';
+                    #[cfg(not(windows))]
+                    const PATH_SEP_BYTE: u8 = b':';
+
                     let gig_path = env::current_exe().unwrap();
                     let gig_dir = gig_path
                         .parent()
@@ -255,7 +264,7 @@ impl AppConfig {
                     let path = env::var_os("PATH").expect("$PATH unset");
                     let path_bytes = path.as_encoded_bytes();
                     let path_parts = path_bytes
-                        .split(|&byte| byte == b':')
+                        .split(|&byte| byte == PATH_SEP_BYTE)
                         .filter(|&slice| slice != gig_dir)
                         .map(|slice|
                             // SAFETY: we are calling
@@ -268,7 +277,7 @@ impl AppConfig {
                             unsafe { OsStr::from_encoded_bytes_unchecked(slice) }
                         )
                         .collect::<Vec<_>>();
-                    let new_path = path_parts.join(OsStr::new(":"));
+                    let new_path = path_parts.join(path_sep);
                     debug!(
                         "$PATH before:\n{}\n$PATH after:\n{}",
                         path.to_string_lossy(),
