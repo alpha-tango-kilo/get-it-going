@@ -204,9 +204,14 @@ impl AppConfig {
                 let mut iter = Shlex::new(cmd_str);
                 let mut command = Command::new(iter.next().unwrap());
                 command.args(iter);
+                command.envs(env::vars_os());
                 command
             },
-            BeforeRun::ScriptPath(path) => Command::new(path),
+            BeforeRun::ScriptPath(path) => {
+                let mut command = Command::new(path);
+                command.envs(env::vars_os());
+                command
+            },
         };
         command.current_dir(root);
         LoggedCommand(command)
@@ -231,6 +236,7 @@ impl AppConfig {
             command.arg(NAME.as_ref());
         }
         command.args(env::args_os().skip(1));
+        command.envs(env::vars_os());
         command.current_dir(root);
         LoggedCommand(command)
     }
@@ -241,6 +247,7 @@ impl AppConfig {
                 Some(path) => {
                     let mut command = Command::new(path);
                     command.args(env::args_os().skip(1));
+                    command.envs(env::vars_os());
                     command
                 },
                 None => {
@@ -297,6 +304,9 @@ impl AppConfig {
                     );
 
                     let mut command = Command::new(NAME.as_ref());
+                    command.args(env::args_os().skip(1));
+                    command.envs(env::vars_os());
+                    // Overwrite $PATH with our edited one
                     command.env("PATH", new_path).args(env::args_os().skip(1));
                     command
                 },
