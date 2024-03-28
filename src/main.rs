@@ -307,7 +307,7 @@ impl AppConfig {
                     command.args(env::args_os().skip(1));
                     command.envs(env::vars_os());
                     // Overwrite $PATH with our edited one
-                    command.env("PATH", new_path).args(env::args_os().skip(1));
+                    command.env("PATH", new_path);
                     command
                 },
             };
