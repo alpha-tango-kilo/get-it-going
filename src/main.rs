@@ -91,7 +91,7 @@ fn main() -> ExitCode {
             ExitCode::from(exit_code)
         },
         Err(why) => {
-            error!("unable to launch {}: {why}", NAME.as_ref());
+            error!("unable to launch {}: {why:#}", NAME.as_ref());
             ExitCode::FAILURE
         },
     }
