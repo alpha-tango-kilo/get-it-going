@@ -14,7 +14,7 @@ use std::{
 
 use anyhow::{anyhow, bail, Context};
 use env_logger::{fmt::Color, Env};
-use log::{debug, error, info, warn, Level, LevelFilter};
+use log::{debug, error, info, trace, warn, Level, LevelFilter};
 use once_cell::sync::Lazy;
 use serde::{
     de::{Error, MapAccess, Visitor},
@@ -264,26 +264,28 @@ impl AppConfig {
                     let gig_path = env::current_exe().unwrap();
                     let gig_dir = gig_path
                         .parent()
-                        .unwrap()
-                        .as_os_str()
-                        .as_encoded_bytes();
+                        .unwrap();
+                    let gig_dir_bytes = gig_dir.as_os_str().as_encoded_bytes();
 
                     let path = env::var_os("PATH").expect("$PATH unset");
                     let path_bytes = path.as_encoded_bytes();
                     let path_parts = path_bytes
                         .split(|&byte| byte == PATH_SEP_BYTE)
                         .filter(|&slice| {
-                            if cfg!(windows) {
+                            let remove = if cfg!(windows) {
                                 // Windows has to be case insensitive
                                 // These conversions compile to zero-cost I think so this is fine to just call here
                                 // SAFETY: see below in .map()
                                 let slice = unsafe { OsStr::from_encoded_bytes_unchecked(slice) };
-                                // SAFETY: this is an unmodified OsStr we called as_encoded_bytes() on
-                                let gig_dir = unsafe { OsStr::from_encoded_bytes_unchecked(gig_dir) };
                                 !slice.eq_ignore_ascii_case(gig_dir)
                             } else {
-                                slice != gig_dir
+                                slice != gig_dir_bytes
+                            };
+
+                            if remove {
+                                debug!("removing {} from $PATH", gig_dir.display());
                             }
+                            remove
                         })
                         .map(|slice|
                             // SAFETY: we are calling
@@ -297,7 +299,7 @@ impl AppConfig {
                         )
                         .collect::<Vec<_>>();
                     let new_path = path_parts.join(path_sep);
-                    debug!(
+                    trace!(
                         "$PATH before:\n{}\n$PATH after:\n{}",
                         path.to_string_lossy(),
                         new_path.to_string_lossy(),
