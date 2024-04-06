@@ -78,6 +78,11 @@ fn main() -> ExitCode {
         })
         .init();
 
+    if env::var_os("GIG_VERSION").is_some() {
+        println!("get-it-going v{}", env!("CARGO_PKG_VERSION"));
+        return ExitCode::SUCCESS;
+    }
+
     match _main() {
         Ok(status) => {
             // Some scuff to get i32 exit codes into u8 without wrapping to
