@@ -470,7 +470,11 @@ impl fmt::Display for LoggedCommand {
             .get_current_dir()
             .filter(|cwd| *cwd != *CWD)
             .map_or(String::new(), |cwd| format!(" in {}", cwd.display()));
-        write!(f, "`{program} {args}`{cwd}")
+        write!(
+            f,
+            "`{program}{space}{args}`{cwd}",
+            space = if !args.is_empty() { " " } else { "" },
+        )
     }
 }
 
