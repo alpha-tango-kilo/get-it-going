@@ -89,12 +89,21 @@ fn main() -> ExitCode {
             // non-zero to zero
             let orig_code = status.code();
             let exit_code: u8 = orig_code
-                .map_or(!status.success() as _, |exit_code| {
-                    exit_code.unsigned_abs() as _
+                .map_or(!status.success() as _, |orig_exit_code| {
+                    orig_exit_code.unsigned_abs() as _
                 });
-            debug!(
-                "exited with status {orig_code:?}, converted to {exit_code}",
-            );
+            // Only print conversion before/after if the value changed or was
+            // made up
+            if orig_code.map_or(true, |orig_exit_code| {
+                exit_code as i32 != orig_exit_code
+            }) {
+                debug!(
+                    "exited with status {orig_code:?}, converted to \
+                     {exit_code}",
+                );
+            } else {
+                trace!("exit code {exit_code} converted cleanly (no loss)");
+            }
             ExitCode::from(exit_code)
         },
         Err(why) => {
