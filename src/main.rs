@@ -33,14 +33,16 @@ static NAME: Lazy<Box<str>> = Lazy::new(|| match env::var("GIG_OVERRIDE") {
     },
 });
 
-static SYSTEM_WIDE_CONFIG_DIRECTORY: Lazy<PathBuf> = Lazy::new(|| {
-    #[cfg(windows)]
-    let system_config_dir = Path::new("C:\\Program Files\\Common Files");
-    #[cfg(target_os = "macos")]
-    let system_config_dir = Path::new("/Library/Application Support");
-    #[cfg(target_os = "linux")]
-    let system_config_dir = Path::new("/etc");
-    system_config_dir.join("get-it-going")
+static SYSTEM_WIDE_CONFIG_DIRECTORY: Lazy<&Path> = Lazy::new(|| {
+    if cfg!(windows) {
+        Path::new("C:\\Program Files\\Common Files\\get-it-going")
+    } else if cfg!(target_os = "macos") {
+        Path::new("/Library/Application Support/get-it-going")
+    } else if cfg!(target_os = "linux") {
+        Path::new("/etc/get-it-going")
+    } else {
+        unreachable!("compile_error! for unsupported OSes should prevent this")
+    }
 });
 
 static CWD: Lazy<PathBuf> = Lazy::new(|| {
@@ -142,7 +144,7 @@ struct AppConfig {
 impl AppConfig {
     fn find_and_load() -> anyhow::Result<Self> {
         let config_name = format!("{}.toml", &*NAME);
-        let config_file_flow = [&*CWD, &*SYSTEM_WIDE_CONFIG_DIRECTORY]
+        let config_file_flow = [CWD.as_path(), *SYSTEM_WIDE_CONFIG_DIRECTORY]
             .iter()
             .try_for_each(|&dir| {
                 let config_file = dir.join(&config_name);
