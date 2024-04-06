@@ -442,12 +442,8 @@ struct Fallback {
 struct LoggedCommand(Command);
 
 impl LoggedCommand {
-    fn log(&self) {
-        info!("spawning {} by running: {self}", NAME.as_ref());
-    }
-
     fn status(mut self) -> anyhow::Result<ExitStatus> {
-        self.log();
+        info!("running: {self}");
         self.0
             .status()
             .with_context(|| format!("failed to invoke {self}"))
